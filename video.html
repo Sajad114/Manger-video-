@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Manager</title>
+    <style>
+        /* Neumorphic Design */
+        body {
+            background: #e0e0e0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            transition: opacity 0.5s, transform 0.5s;
+        }
+
+        input[type="file"],
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            border: none;
+            box-shadow: inset 6px 6px 10px #bebebe, inset -6px -6px 10px #ffffff;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 80%;
+            margin-bottom: 20px;
+            box-shadow: 5px 5px 15px #bebebe, -5px -5px 15px #ffffff;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        button {
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 5px;
+            border: none;
+            box-shadow: 4px 4px 8px #bebebe, -4px -4px 8px #ffffff;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #f0f0f0;
+        }
+
+        /* Loader */
+        .loader {
+            width: 48px;
+            height: 48px;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+        }
+
+        .loader:before {
+            content: '';
+            width: 48px;
+            height: 5px;
+            background: #f0808050;
+            position: absolute;
+            top: 60px;
+            left: 0;
+            border-radius: 50%;
+            animation: shadow324 0.5s linear infinite;
+        }
+
+        .loader:after {
+            content: '';
+            width: 100%;
+            height: 100%;
+            background: #f08080;
+            position: absolute;
+            top: 0;
+            left: 0;
+            border-radius: 4px;
+            animation: jump7456 0.5s linear infinite;
+        }
+
+        @keyframes jump7456 {
+            15% {
+                border-bottom-right-radius: 3px;
+            }
+
+            25% {
+                transform: translateY(9px) rotate(22.5deg);
+            }
+
+            50% {
+                transform: translateY(18px) scale(1, .9) rotate(45deg);
+                border-bottom-right-radius: 40px;
+            }
+
+            75% {
+                transform: translateY(9px) rotate(67.5deg);
+            }
+
+            100% {
+                transform: translateY(0) rotate(90deg);
+            }
+        }
+
+        @keyframes shadow324 {
+            0%,
+            100% {
+                transform: scale(1, 1);
+            }
+
+            50% {
+                transform: scale(1.2, 1);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="page-loader" class="loader" style="display: none;"></div>
+
+    <div id="login-form">
+        <h2>Login</h2>
+        <input type="email" id="login-email" placeholder="Email">
+        <input type="password" id="login-password" placeholder="Password">
+        <button id="login-button">Login</button>
+        <p id="login-error-message" style="color: red;"></p>
+    </div>
+
+    <div id="video-manager" style="display: none;">
+        <h1 id="page-title">Video Manager</h1>
+        <input type="file" id="video-upload" accept="video/*">
+        <input type="text" id="search-input" placeholder="Search by ID">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Preview</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="video-table"></tbody>
+        </table>
+        <video id="video-player" controls style="display:none; width:80%;"></video>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+        import { getDatabase, ref as dbRef, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBS1ToxRa9qFKnvJY1K_aIJffVBsjf4_m4",
+            authDomain: "maxbot-2febf.firebaseapp.com",
+            databaseURL: "https://maxbot-2febf-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "maxbot-2febf",
+            storageBucket: "maxbot-2febf.appspot.com",
+            messagingSenderId: "332273488672",
+            appId: "1:332273488672:web:4752c677f907f03ac83d45",
+            measurementId: "G-PL15DPY50Z"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const database = getDatabase(app);
+        const storage = getStorage(app);
+
+        const loginForm = document.getElementById('login-form');
+        const videoManager = document.getElementById('video-manager');
+        const loginButton = document.getElementById('login-button');
+        const loginEmail = document.getElementById('login-email');
+        const loginPassword = document.getElementById('login-password');
+        const loginErrorMessage = document.getElementById('login-error-message');
+        const pageTitle = document.getElementById('page-title');
+
+        const videoUpload = document.getElementById('video-upload');
+        const videoTable = document.getElementById('video-table');
+        const searchInput = document.getElementById('search-input');
+        const videoPlayer = document.getElementById('video-player');
+
+        loginButton.addEventListener('click', function () {
+            const email = loginEmail.value;
+            const password = loginPassword.value;
+
+            signInWithEmailAndPassword(auth, email, password)
+                .then((userCredential) => {
+                    loginForm.style.display = 'none';
+                    videoManager.style.display = 'block';
+                    loadVideos();  // استدعاء وظيفة تحميل الفيديوهات بعد تسجيل الدخول بنجاح
+                })
+                .catch((error) => {
+                    loginErrorMessage.textContent = "Error: " + error.message;
+                });
+        });
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                loginForm.style.display = 'none';
+                videoManager.style.display = 'block';
+                loadVideos();  // تحميل الفيديوهات إذا كان المستخدم مسجلاً الدخول بالفعل
+            } else {
+                loginForm.style.display = 'block';
+                videoManager.style.display = 'none';
+            }
+        });
+
+        function showPageLoader(show) {
+            const loader = document.getElementById('page-loader');
+            loader.style.display = show ? 'block' : 'none';
+        }
+
+        function saveVideo(video) {
+            set(dbRef(database, 'videos/' + video.id), video);
+        }
+
+        function addVideoToTable(video) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${video.id}</td>
+                <td><video src="${video.url}" controls muted width="100"></video></td>
+                <td>
+                    <button onclick="deleteVideo('${video.id}')">Delete</button>
+                    <button onclick="playVideo('${video.url}')">Play</button>
+                    <button onclick="downloadVideo('${video.url}')">Download</button>
+                </td>
+            `;
+            videoTable.appendChild(row);
+        }
+
+        window.deleteVideo = function (id) {
+            const dbVideoRef = dbRef(database, 'videos/' + id);
+            set(dbVideoRef, null);
+            loadVideos();
+        }
+
+        window.playVideo = function (url) {
+            videoPlayer.style.display = 'block';
+            videoPlayer.src = url;
+        }
+
+        window.downloadVideo = function (url) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", url);
+            xhr.responseType =            "blob";
+            xhr.onload = function () {
+                const blob = xhr.response;
+                const a = document.createElement('a');
+                a.href = window.URL.createObjectURL(blob);
+                a.download = "video.mp4";
+                a.click();
+            };
+            xhr.send();
+        }
+
+        function handleFileUpload(file) {
+            showPageLoader(true);
+            const id = Math.random().toString(36).substr(2, 9);
+            const storageReference = storageRef(storage, 'videos/' + id);
+
+            uploadBytes(storageReference, file).then(snapshot => {
+                getDownloadURL(snapshot.ref).then(downloadURL => {
+                    const video = {
+                        id: id,
+                        url: downloadURL
+                    };
+                    saveVideo(video);
+                    addVideoToTable(video);
+                    showPageLoader(false);
+                });
+            });
+        }
+
+        function loadVideos() {
+            showPageLoader(true);
+            const dbVideosRef = dbRef(database, 'videos/');
+            onValue(dbVideosRef, snapshot => {
+                videoTable.innerHTML = '';
+                snapshot.forEach(childSnapshot => {
+                    const video = childSnapshot.val();
+                    addVideoToTable(video);
+                });
+                showPageLoader(false);
+            });
+        }
+
+        videoUpload.addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleFileUpload(file);
+            }
+        });
+
+        searchInput.addEventListener('input', function () {
+            const filter = searchInput.value.toLowerCase();
+            const rows = videoTable.getElementsByTagName('tr');
+            for (let i = 0; i < rows.length; i++) {
+                const cells = rows[i].getElementsByTagName('td');
+                if (cells.length > 0) {
+                    const idCell = cells[0].textContent.toLowerCase();
+                    if (idCell.indexOf(filter) > -1) {
+                        rows[i].style.display = '';
+                    } else {
+                        rows[i].style.display = 'none';
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
